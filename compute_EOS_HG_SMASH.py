@@ -1,6 +1,7 @@
-# prepare_fce_eos_smash.py - version 0.2.4 - 20/03/2022
+# prepare_fce_eos_smash.py - version 0.3.0 - 23/03/2022
 # 
 # it creates a tabulated EoS assuming full chemical equilibrium. In this version only the energy density and the net baryon density are considered.
+# from v 0.3 we compute also the pressure
 
 import fileinput
 import math
@@ -32,14 +33,14 @@ edens_sp=[0.001,0.01,0.1,1.]
 edens_p=[11,51,181]
 
 #root finding tolerance error
-root_tol=1.e-6
+root_tol=1.e-7
 
 #fine calculation ratio over min energy density limit
-fine_calc=0.1
+fine_calc=0.12
 #ratio over min energy density limit to skip the calculation
-skip_calc=0.001
+skip_calc=0.0005
 #fine calcolatin points
-fine_points=3000
+fine_points=6000
 
 energy_guess_start=0.9
 # the initial rhoB is 0
@@ -94,6 +95,21 @@ def integrand_density(k,T,mu,m,sf):
 def integrand_energy_dens(k,T,mu,m,sf):
     en=np.sqrt(m**2+k**2)
     return en*k**2/(np.exp((en-mu)/T)+sf) 
+
+def integrand_pressure(k,T,mu,m,sf):
+    en=np.sqrt(m**2+k**2)
+    return k**4/(3*en*(np.exp((en-mu)/T)+sf))
+
+def get_pressure(x,plim):
+    T_fce=x[0]
+    muB_fce=x[1]
+    muS_fce=x[2]
+    muQ_fce=x[3]
+    int_pressure=0
+    for i in range(num_hadrons):
+        chempot=muB_fce*h.baryon_number[i]+h.strangeness[i]*muS_fce+h.electric_charge[i]*muQ_fce
+        int_pressure=int_pressure+h.spin_deg[i]*(integrate.quad(integrand_pressure,0,plim,args=(T_fce,chempot,h.mass[i],stat_factor[i]),limit=300)[0])
+    return one_over_twopihbarc3*int_pressure
 
 def f_system_fce(x,inargs):
     T_fce=x[0]
@@ -167,6 +183,7 @@ T_arr=np.zeros((N_edens,N_rhoB),dtype=np.float64)
 muB_arr=np.zeros((N_edens,N_rhoB),dtype=np.float64)
 muS_arr=np.zeros((N_edens,N_rhoB),dtype=np.float64)
 muQ_arr=np.zeros((N_edens,N_rhoB),dtype=np.float64)
+p_arr=np.zeros((N_edens,N_rhoB),dtype=np.float64)
 
 ed_index_start=np.argmin(abs(energy_guess_start-energy_density_array))
 energy_density_array_low=energy_density_array[:ed_index_start]
@@ -193,6 +210,7 @@ for i in range(len(energy_density_array_low)):
             muB_arr[ed_index_start-i-1,0]=muB_guess
             muS_arr[ed_index_start-i-1,0]=muS_guess
             muQ_arr[ed_index_start-i-1,0]=muQ_guess
+            p_arr[ed_index_start-i-1,0]=get_pressure([T_guess,muB_guess,muS_guess,muQ_guess],plimit)
         else:
             print("Error for energy density "+str(ed))
     else:
@@ -212,6 +230,7 @@ for i in range(len(energy_density_array_high)):
         muB_arr[ed_index_start+i,0]=muB_guess
         muS_arr[ed_index_start+i,0]=muS_guess
         muQ_arr[ed_index_start+i,0]=muQ_guess
+        p_arr[ed_index_start+i,0]=get_pressure([T_guess,muB_guess,muS_guess,muQ_guess],plimit)
     else:
         print("Error for energy density "+str(ed))
 
@@ -266,6 +285,9 @@ for k in range(1,N_rhoB):
                     break
         print("Trying to solve energy_density_reversed for "+str(i)+sp+str(k)+sp+str(ed)+sp+str(rhoB_input)+sp+str(rhoS_input)+sp+str(rhoQ_input))
         print("Guesses are "+str(T_guess)+sp+str(muB_guess)+sp+str(muS_guess)+sp+str(muQ_guess))
+        plimit=ed*p_factor
+        if (plimit < plim_min):
+            plimit=plim_min
         TMUFCE = optimize.root(f_system_fce, [T_guess,muB_guess,muS_guess,muQ_guess], args=[ed,rhoB_input,rhoS_input,rhoQ_input,plimit])   
         if(TMUFCE.success):
              T_guess,muB_guess,muS_guess,muQ_guess=TMUFCE.x[0:4]
@@ -273,7 +295,8 @@ for k in range(1,N_rhoB):
              muB_arr[j,k]=muB_guess
              muS_arr[j,k]=muS_guess
              muQ_arr[j,k]=muQ_guess
-             print("Success: "+str(T_guess)+sp+str(muB_guess)+sp+str(muS_guess)+sp+str(muQ_guess))
+             p_arr[j,k]=get_pressure([T_guess,muB_guess,muS_guess,muQ_guess],plimit)
+             print("Success: "+str(T_guess)+sp+str(muB_guess)+sp+str(muS_guess)+sp+str(muQ_guess)+sp+str(p_arr[j,k]))
         else:
              print("Error for energy density "+str(ed)+" and baryon density "+str(rhoB_input))
              break
@@ -283,8 +306,8 @@ with open(outputfile,"w") as outf:
     outf.write(sys.argv[2]+"\n")
     outf.write("#charge density\n")
     outf.write(sys.argv[3]+"\n")
-    outf.write("#baryon density    energy density     T     muB     muS    muQ\n")
+    outf.write("#baryon density    energy density     T     p    muB     muS    muQ\n")
     for k in range(N_rhoB):
         for i in range(N_edens):
-            vals=(rhoB_points[k], energy_density_array[i], T_arr[i,k],muB_arr[i,k],muS_arr[i,k],muQ_arr[i,k])
+            vals=(rhoB_points[k], energy_density_array[i], T_arr[i,k], p_arr[i,k], muB_arr[i,k], muS_arr[i,k], muQ_arr[i,k])
             write_results(outf,vals)

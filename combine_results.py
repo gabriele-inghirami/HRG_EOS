@@ -1,6 +1,6 @@
-# version 0.1 - 18/03/2022
+# version 0.3.1 - 28/03/2022
 
-# it combines the results obtained with computes_EOS_HG_SMASH_v0.2.py
+# it combines the results obtained with computes_EOS_HG_SMASH_v0.3.py
 # if the header if the EoS file changes, the function get_q_s must be modified accordingly
 # warning: the input files must refer to distinct rhoQ and rhoS values!
 
@@ -68,7 +68,7 @@ N_input_files=len(sys.argv)-3
 
 # the 00 charachter are introduced to help to remind that the first argument is the outputfile
 if((N_input_files<3) or (sys.argv[2]!="00")):
-   print ('Syntax: ./computes_EOS_HG_SMASH_v0.2.py <outputfile> 00 <inputfile 1> [inputfile 2] ...')
+   print ('Syntax: ./computes_EOS_HG_SMASH_v0.3.py <outputfile> 00 <inputfile 1> [inputfile 2] ...')
    sys.exit(1)
 
 outputfile=sys.argv[1]
@@ -99,6 +99,7 @@ rhoS_array=np.array(s_list,dtype=np.float64)
 rhoQ_array=np.array(q_list,dtype=np.float64)
 
 Temp=np.zeros((ne,nb,nq,ns),dtype=np.float64)
+press=np.zeros((ne,nb,nq,ns),dtype=np.float64)
 muB=np.zeros((ne,nb,nq,ns),dtype=np.float64)
 muS=np.zeros((ne,nb,nq,ns),dtype=np.float64)
 muQ=np.zeros((ne,nb,nq,ns),dtype=np.float64)
@@ -112,8 +113,9 @@ for infile in infiles:
          # we read the data
          for iB in range(nb):
              for iE in range(ne):
-                 T_val,muB_val,muS_val,muQ_val=np.float64(fln.readline().split()[2:])
+                 T_val,p_val,muB_val,muS_val,muQ_val=np.float64(fln.readline().split()[2:])
                  Temp[iE,iB,iQ,iS]=T_val               
+                 press[iE,iB,iQ,iS]=p_val               
                  muB[iE,iB,iQ,iS]=muB_val               
                  muS[iE,iB,iQ,iS]=muS_val               
                  muQ[iE,iB,iQ,iS]=muQ_val               
@@ -135,6 +137,7 @@ if use_only_single_rhoS:
                      ff.format(rhoB_array[iB])+sp+\
                      ff.format(rhoQ_array[iQ])+sp+\
                      ff.format(Temp[iE,iB,iQ,iS])+sp+\
+                     ff.format(press[iE,iB,iQ,iS])+sp+\
                      ff.format(muB[iE,iB,iQ,iS])+sp+\
                      ff.format(muS[iE,iB,iQ,iS])+sp+\
                      ff.format(muQ[iE,iB,iQ,iS])+"\n")
